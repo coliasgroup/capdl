@@ -1190,6 +1190,7 @@ static void configure_tcb(CDL_Model *spec, CDL_ObjID tcb)
 
     uintptr_t pc = CDL_TCB_PC(cdl_tcb);
     uintptr_t sp = CDL_TCB_SP(cdl_tcb);
+    uintptr_t spsr = CDL_TCB_SPSR(cdl_tcb);
 
     if (sp % (sizeof(uintptr_t) * 2) != 0) {
         ZF_LOGF("TCB %s's stack pointer is not dword-aligned", CDL_Obj_Name(&spec->objects[tcb]));
@@ -1283,6 +1284,7 @@ static void configure_tcb(CDL_Model *spec, CDL_ObjID tcb)
 #if defined(CONFIG_ARCH_ARM)
         .pc = pc,
         .sp = sp,
+        .spsr = spsr,
 #ifdef CONFIG_ARCH_AARCH32
         .r0 = argc > 0 ? argv[0] : 0,
         .r1 = argc > 1 ? argv[1] : 0,

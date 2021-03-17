@@ -207,7 +207,7 @@ class CSpaceAllocator(object):
         self.cnode = cnode
         self.slot = 1  # Skip the null slot
 
-    def alloc(self, obj, **kwargs):
+    def alloc(self, obj, update_guard_size=True, **kwargs):
         '''
         Allocate a cap in the next available slot, referencing the given
         object. The caller is expected to pass either (a) no extra parameters
@@ -240,7 +240,7 @@ class CSpaceAllocator(object):
                 kwargs['grant'] = kwargs['rights'] & ObjectRights.seL4_CanGrant > 0
                 kwargs['grantreply'] = kwargs['rights'] & ObjectRights.seL4_CanGrantReply > 0
             cap = Cap(obj, **kwargs)
-        if isinstance(obj, CNode):
+        if isinstance(obj, CNode) and update_guard_size:
             obj.update_guard_size_caps.append(cap)
 
         self.cnode[slot] = cap

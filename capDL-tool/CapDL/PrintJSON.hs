@@ -383,7 +383,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
                     { ipcBufferAddr
                     , ip = Just ip
                     , sp = Just sp
-                    , spsr = Just spsr
+                    , spsr -- HACK require with `spsr = Just spsr` in the future.
                     , prio = Just prio
                     , max_prio = Just max_prio
                     , affin = Just affinity
@@ -401,7 +401,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
                     , resume = fromMaybe True resume
                     , ip
                     , sp
-                    , spsr
+                    , spsr = fromMaybe 0 spsr
                     }
                 })
         x -> traceShow x undefined

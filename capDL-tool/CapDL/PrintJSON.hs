@@ -57,7 +57,7 @@ data Object =
     | Object_Notification
     | Object_CNode ObjectCNode
     | Object_TCB ObjectTCB
-    | Object_Irq ObjectIrq
+    | Object_IRQ ObjectIRQ
     | Object_VCPU
     | Object_SmallPage ObjectSmallPage
     | Object_LargePage ObjectLargePage
@@ -66,7 +66,7 @@ data Object =
     | Object_PUD ObjectPUD
     | Object_PGD ObjectPGD
     | Object_ASIDPool ObjectASIDPool
-    | Object_ARMIrq ObjectARMIrq
+    | Object_ArmIRQ ObjectArmIRQ
     deriving (Eq, Show)
 
 instance ToJSON Object where
@@ -76,7 +76,7 @@ instance ToJSON Object where
         Object_Notification -> String "Notification"
         Object_CNode obj -> tagged "CNode" obj
         Object_TCB obj -> tagged "TCB" obj
-        Object_Irq obj -> tagged "Irq" obj
+        Object_IRQ obj -> tagged "IRQ" obj
         Object_VCPU -> String "VCPU"
         Object_SmallPage obj -> tagged "SmallPage" obj
         Object_LargePage obj -> tagged "LargePage" obj
@@ -85,7 +85,7 @@ instance ToJSON Object where
         Object_PUD obj -> tagged "PUD" obj
         Object_PGD obj -> tagged "PGD" obj
         Object_ASIDPool obj -> tagged "ASIDPool" obj
-        Object_ARMIrq obj -> tagged "ARMIrq" obj
+        Object_ArmIRQ obj -> tagged "ArmIRQ" obj
 
 data Cap =
       Cap_Untyped CapUntyped
@@ -93,7 +93,7 @@ data Cap =
     | Cap_Notification CapNotification
     | Cap_CNode CapCNode
     | Cap_TCB CapTCB
-    | Cap_IrqHandler CapIrqHandler
+    | Cap_IRQHandler CapIRQHandler
     | Cap_VCPU CapVCPU
     | Cap_SmallPage CapSmallPage
     | Cap_LargePage CapLargePage
@@ -102,7 +102,7 @@ data Cap =
     | Cap_PUD CapPUD
     | Cap_PGD CapPGD
     | Cap_ASIDPool CapASIDPool
-    | Cap_ARMIrqHandler CapARMIrqHandler
+    | Cap_ArmIRQHandler CapArmIRQHandler
     deriving (Eq, Show)
 
 instance ToJSON Cap where
@@ -112,7 +112,7 @@ instance ToJSON Cap where
         Cap_Notification cap -> tagged "Notification" cap
         Cap_CNode cap -> tagged "CNode" cap
         Cap_TCB cap -> tagged "TCB" cap
-        Cap_IrqHandler cap -> tagged "IrqHandler" cap
+        Cap_IRQHandler cap -> tagged "IRQHandler" cap
         Cap_VCPU cap -> tagged "VCPU" cap
         Cap_SmallPage cap -> tagged "SmallPage" cap
         Cap_LargePage cap -> tagged "LargePage" cap
@@ -121,7 +121,7 @@ instance ToJSON Cap where
         Cap_PUD cap -> tagged "PUD" cap
         Cap_PGD cap -> tagged "PGD" cap
         Cap_ASIDPool cap -> tagged "ASIDPool" cap
-        Cap_ARMIrqHandler cap -> tagged "ARMIrqHandler" cap
+        Cap_ArmIRQHandler cap -> tagged "ArmIRQHandler" cap
 
 data Rights = Rights
     { rights_read :: Bool
@@ -207,7 +207,7 @@ data ObjectTCBExtraInfo = ObjectTCBExtraInfo
     , ipc_buffer_addr :: Word
     } deriving (Eq, Show, Generic, ToJSON)
 
-data ObjectIrq = ObjectIrq
+data ObjectIRQ = ObjectIRQ
     { slots :: CapTable
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -241,7 +241,7 @@ data ObjectASIDPool = ObjectASIDPool
     { high :: Word
     } deriving (Eq, Show, Generic, ToJSON)
 
-data ObjectARMIrq = ObjectARMIrq
+data ObjectArmIRQ = ObjectArmIRQ
     { slots :: CapTable
     , trigger :: Word
     , target :: Word
@@ -273,7 +273,7 @@ data CapTCB = CapTCB
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
-data CapIrqHandler = CapIrqHandler
+data CapIRQHandler = CapIRQHandler
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -313,7 +313,7 @@ data CapASIDPool = CapASIDPool
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
-data CapARMIrqHandler = CapARMIrqHandler
+data CapArmIRQHandler = CapArmIRQHandler
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -368,10 +368,10 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.PD slots -> Object_PD (ObjectPD (translateCapTable slots))
         C.PUD slots -> Object_PUD (ObjectPUD (translateCapTable slots))
         C.PGD slots -> Object_PGD (ObjectPGD (translateCapTable slots))
-        C.CNode slots 0 -> Object_Irq (ObjectIrq (translateCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
+        C.CNode slots 0 -> Object_IRQ (ObjectIRQ (translateCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
         C.CNode slots sizeBits -> Object_CNode (ObjectCNode sizeBits (translateCapTable slots))
         C.VCPU -> Object_VCPU
-        C.ARMIrq slots trigger target -> Object_ARMIrq (ObjectARMIrq (translateCapTable slots) trigger target)
+        C.ARMIrq slots trigger target -> Object_ArmIRQ (ObjectArmIRQ (translateCapTable slots) trigger target)
         C.ASIDPool slots (Just asidHigh) -> assert (M.null slots) Object_ASIDPool (ObjectASIDPool asidHigh)
         C.TCB
             { slots
@@ -412,7 +412,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.NotificationCap capObj capBadge capRights -> Cap_Notification (CapNotification (translateId capObj) capBadge (translateRights capRights))
         C.CNodeCap capObj capGuard capGuardSize -> Cap_CNode (CapCNode (translateId capObj) capGuard capGuardSize)
         C.TCBCap capObj -> Cap_TCB (CapTCB (translateId capObj))
-        C.IRQHandlerCap capObj -> Cap_IrqHandler (CapIrqHandler (translateId capObj))
+        C.IRQHandlerCap capObj -> Cap_IRQHandler (CapIRQHandler (translateId capObj))
         C.VCPUCap capObj -> Cap_VCPU (CapVCPU (translateId capObj))
         C.FrameCap { capObj, capRights, capCached } ->
             let Just (C.Frame { vmSizeBits }) = M.lookup capObj objMap
@@ -425,7 +425,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.PDCap capObj _ -> Cap_PD (CapPD (translateId capObj))
         C.PUDCap capObj _ -> Cap_PUD (CapPUD (translateId capObj))
         C.PGDCap capObj _ -> Cap_PGD (CapPGD (translateId capObj))
-        C.ARMIRQHandlerCap capObj -> Cap_ARMIrqHandler (CapARMIrqHandler (translateId capObj))
+        C.ARMIRQHandlerCap capObj -> Cap_ArmIRQHandler (CapArmIRQHandler (translateId capObj))
         C.ASIDPoolCap capObj -> Cap_ASIDPool (CapASIDPool (translateId capObj))
         x -> traceShow x undefined
 

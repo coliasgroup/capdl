@@ -57,6 +57,7 @@ data Object =
     | Object_Notification
     | Object_CNode ObjectCNode
     | Object_TCB ObjectTCB
+    | Object_Irq ObjectIrq
     | Object_VCPU
     | Object_SmallPage ObjectSmallPage
     | Object_LargePage ObjectLargePage
@@ -75,6 +76,7 @@ instance ToJSON Object where
         Object_Notification -> String "Notification"
         Object_CNode obj -> tagged "CNode" obj
         Object_TCB obj -> tagged "TCB" obj
+        Object_Irq obj -> tagged "Irq" obj
         Object_VCPU -> String "VCPU"
         Object_SmallPage obj -> tagged "SmallPage" obj
         Object_LargePage obj -> tagged "LargePage" obj
@@ -91,6 +93,7 @@ data Cap =
     | Cap_Notification CapNotification
     | Cap_CNode CapCNode
     | Cap_TCB CapTCB
+    | Cap_IrqHandler CapIrqHandler
     | Cap_VCPU CapVCPU
     | Cap_SmallPage CapSmallPage
     | Cap_LargePage CapLargePage
@@ -99,7 +102,7 @@ data Cap =
     | Cap_PUD CapPUD
     | Cap_PGD CapPGD
     | Cap_ASIDPool CapASIDPool
-    | Cap_ARMIrq CapARMIrq
+    | Cap_ARMIrqHandler CapARMIrqHandler
     deriving (Eq, Show)
 
 instance ToJSON Cap where
@@ -109,6 +112,7 @@ instance ToJSON Cap where
         Cap_Notification cap -> tagged "Notification" cap
         Cap_CNode cap -> tagged "CNode" cap
         Cap_TCB cap -> tagged "TCB" cap
+        Cap_IrqHandler cap -> tagged "IrqHandler" cap
         Cap_VCPU cap -> tagged "VCPU" cap
         Cap_SmallPage cap -> tagged "SmallPage" cap
         Cap_LargePage cap -> tagged "LargePage" cap
@@ -117,7 +121,7 @@ instance ToJSON Cap where
         Cap_PUD cap -> tagged "PUD" cap
         Cap_PGD cap -> tagged "PGD" cap
         Cap_ASIDPool cap -> tagged "ASIDPool" cap
-        Cap_ARMIrq cap -> tagged "ARMIrq" cap
+        Cap_ARMIrqHandler cap -> tagged "ARMIrqHandler" cap
 
 data Rights = Rights
     { rights_read :: Bool
@@ -141,23 +145,39 @@ emptyRights = Rights False False False False
 type Fill = [FillEntry]
 
 data FillEntry = FillEntry
-    { fillEntry_offset :: Word
-    , fillEntry_length :: Word
-    , fillEntry_content:: FillEntryContentFile
-    } deriving (Eq, Show)
+    { range :: FillEntryRange
+    , content :: FillEntryContent
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data FillEntryRange = FillEntryRange
+    { start :: Word
+    , end :: Word
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data FillEntryContent =
+      FillEntryContent_Data FillEntryContentFile
+    | FillEntryContent_BootInfo FillEntryContentBootInfo
+    deriving (Eq, Show)
+
+instance ToJSON FillEntryContent where
+    toJSON content = case content of
+        FillEntryContent_Data file -> tagged "Data" file
+        FillEntryContent_BootInfo bootinfo -> tagged "BootInfo" bootinfo
 
 data FillEntryContentFile = FillEntryContentFile
     { file :: String
     , file_offset :: Word
     } deriving (Eq, Show, Generic, ToJSON)
 
--- HACK until NoFieldSelectors is available
-instance ToJSON FillEntry where
-    toJSON FillEntry {..} = Aeson.object
-        [ "offset" .= fillEntry_offset
-        , "length" .= fillEntry_length
-        , "content" .= fillEntry_content
-        ]
+data FillEntryContentBootInfo = FillEntryContentBootInfo
+    { id :: FillEntryContentBootInfoId
+    , offset :: Word
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data FillEntryContentBootInfoId =
+      Padding
+    | Fdt
+    deriving (Eq, Show, Generic, ToJSON)
 
 data ObjectUntyped = ObjectUntyped
     { size_bits :: Word
@@ -185,6 +205,10 @@ data ObjectTCBExtraInfo = ObjectTCBExtraInfo
     , sp :: Word
     , spsr :: Word
     , ipc_buffer_addr :: Word
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data ObjectIrq = ObjectIrq
+    { slots :: CapTable
     } deriving (Eq, Show, Generic, ToJSON)
 
 data ObjectSmallPage = ObjectSmallPage
@@ -249,6 +273,10 @@ data CapTCB = CapTCB
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
+data CapIrqHandler = CapIrqHandler
+    { object :: ObjID
+    } deriving (Eq, Show, Generic, ToJSON)
+
 data CapVCPU = CapVCPU
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
@@ -285,7 +313,7 @@ data CapASIDPool = CapASIDPool
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
-data CapARMIrq = CapARMIrq
+data CapARMIrqHandler = CapARMIrqHandler
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -340,6 +368,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.PD slots -> Object_PD (ObjectPD (translateCapTable slots))
         C.PUD slots -> Object_PUD (ObjectPUD (translateCapTable slots))
         C.PGD slots -> Object_PGD (ObjectPGD (translateCapTable slots))
+        C.CNode slots 0 -> Object_Irq (ObjectIrq (translateCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
         C.CNode slots sizeBits -> Object_CNode (ObjectCNode sizeBits (translateCapTable slots))
         C.VCPU -> Object_VCPU
         C.ARMIrq slots trigger target -> Object_ARMIrq (ObjectARMIrq (translateCapTable slots) trigger target)
@@ -383,6 +412,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.NotificationCap capObj capBadge capRights -> Cap_Notification (CapNotification (translateId capObj) capBadge (translateRights capRights))
         C.CNodeCap capObj capGuard capGuardSize -> Cap_CNode (CapCNode (translateId capObj) capGuard capGuardSize)
         C.TCBCap capObj -> Cap_TCB (CapTCB (translateId capObj))
+        C.IRQHandlerCap capObj -> Cap_IrqHandler (CapIrqHandler (translateId capObj))
         C.VCPUCap capObj -> Cap_VCPU (CapVCPU (translateId capObj))
         C.FrameCap { capObj, capRights, capCached } ->
             let Just (C.Frame { vmSizeBits }) = M.lookup capObj objMap
@@ -395,7 +425,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.PDCap capObj _ -> Cap_PD (CapPD (translateId capObj))
         C.PUDCap capObj _ -> Cap_PUD (CapPUD (translateId capObj))
         C.PGDCap capObj _ -> Cap_PGD (CapPGD (translateId capObj))
-        C.ARMIRQHandlerCap capObj -> Cap_ARMIrq (CapARMIrq (translateId capObj))
+        C.ARMIRQHandlerCap capObj -> Cap_ARMIrqHandler (CapARMIrqHandler (translateId capObj))
         C.ASIDPoolCap capObj -> Cap_ASIDPool (CapASIDPool (translateId capObj))
         x -> traceShow x undefined
 
@@ -405,14 +435,26 @@ renderName (name, Nothing) = name
 translateFill :: Maybe [[String]] -> Fill
 translateFill = map f . concat . toList
   where
-    f (dest_offset:dest_len:"CDL_FrameFill_FileData":file:file_offset:[]) = FillEntry
-        { fillEntry_offset = read dest_offset
-        , fillEntry_length = read dest_len
-        , fillEntry_content = FillEntryContentFile
-            { file = tail (init file)
-            , file_offset = read file_offset
-            }
+    f (dest_offset:dest_len:rest) = FillEntry
+        { range = FillEntryRange { start = start, end = end }
+        , content
         }
+      where
+        start = read dest_offset
+        len = read dest_len
+        end = start + len
+        content = case rest of
+            "CDL_FrameFill_FileData":file:file_offset:[] -> FillEntryContent_Data
+                (FillEntryContentFile
+                    { file = tail (init file)
+                    , file_offset = read file_offset
+                    })
+            "CDL_FrameFill_BootInfo":id:offset:[] -> FillEntryContent_BootInfo
+                (FillEntryContentBootInfo
+                    { id = case id of
+                        "CDL_FrameFill_BootInfo_FDT" -> Fdt
+                    , offset = read offset
+                    })
 
 translateRights :: C.CapRights -> Rights
 translateRights = foldr f emptyRights

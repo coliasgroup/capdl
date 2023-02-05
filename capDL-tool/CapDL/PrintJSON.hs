@@ -335,11 +335,11 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
   where
     sortedObjects = sortObjects objSizeMap (M.toList objMap)
     objIdToSeqId = M.fromList . flip zip [0..] $ map fst sortedObjects
-    translateId = (M.!) objIdToSeqId
-    translateCapTable = M.toList . M.map renderCap . M.mapKeys toInteger
+    renderId = (M.!) objIdToSeqId
+    renderCapTable = M.toList . M.map renderCap . M.mapKeys toInteger
 
     irqs =
-        [ (irq, translateId obj)
+        [ (irq, renderId obj)
         | (irq, obj) <- M.toAscList irqNode
         ] 
 
@@ -347,7 +347,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
       where
         table = sortBy (comparing fst)
             [ let Just asidHigh = maybeAsidHigh
-              in assert (M.null lowSlots) (asidHigh, translateId objID)
+              in assert (M.null lowSlots) (asidHigh, renderId objID)
             | (objID, C.ASIDPool lowSlots maybeAsidHigh) <- M.toList objMap
             ]
 
@@ -364,18 +364,18 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.Endpoint -> Object_Endpoint
         C.Notification -> Object_Notification
         C.Frame { vmSizeBits, maybePaddr, maybeFill } ->
-            let fill = translateFill maybeFill
+            let fill = renderFill maybeFill
             in case vmSizeBits of
                 12 -> Object_SmallPage (ObjectSmallPage maybePaddr fill)
                 21 -> Object_LargePage (ObjectLargePage maybePaddr fill)
-        C.PT slots -> Object_PT (ObjectPT (translateCapTable slots))
-        C.PD slots -> Object_PD (ObjectPD (translateCapTable slots))
-        C.PUD slots -> Object_PUD (ObjectPUD (translateCapTable slots))
-        C.PGD slots -> Object_PGD (ObjectPGD (translateCapTable slots))
-        C.CNode slots 0 -> Object_IRQ (ObjectIRQ (translateCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
-        C.CNode slots sizeBits -> Object_CNode (ObjectCNode sizeBits (translateCapTable slots))
+        C.PT slots -> Object_PT (ObjectPT (renderCapTable slots))
+        C.PD slots -> Object_PD (ObjectPD (renderCapTable slots))
+        C.PUD slots -> Object_PUD (ObjectPUD (renderCapTable slots))
+        C.PGD slots -> Object_PGD (ObjectPGD (renderCapTable slots))
+        C.CNode slots 0 -> Object_IRQ (ObjectIRQ (renderCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
+        C.CNode slots sizeBits -> Object_CNode (ObjectCNode sizeBits (renderCapTable slots))
         C.VCPU -> Object_VCPU
-        C.ARMIrq slots trigger target -> Object_ArmIRQ (ObjectArmIRQ (translateCapTable slots) (ObjectArmIRQExtraInfo trigger target))
+        C.ARMIrq slots trigger target -> Object_ArmIRQ (ObjectArmIRQ (renderCapTable slots) (ObjectArmIRQExtraInfo trigger target))
         C.ASIDPool slots (Just asidHigh) -> assert (M.null slots) Object_ASIDPool (ObjectASIDPool asidHigh)
         C.TCB
             { slots
@@ -394,7 +394,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
                     , resume
                     } = extraInfo
             in Object_TCB (ObjectTCB
-                { slots = translateCapTable slots
+                { slots = renderCapTable slots
                 , extra = ObjectTCBExtraInfo
                     { ipc_buffer_addr = ipcBufferAddr
                     , fault_ep = fromMaybe 0 faultEndpoint
@@ -411,33 +411,33 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         x -> traceShow x undefined
 
     renderCap cap = case cap of
-        C.UntypedCap capObj -> Cap_Untyped (CapUntyped (translateId capObj))
-        C.EndpointCap capObj capBadge capRights -> Cap_Endpoint (CapEndpoint (translateId capObj) capBadge (translateRights capRights))
-        C.NotificationCap capObj capBadge capRights -> Cap_Notification (CapNotification (translateId capObj) capBadge (translateRights capRights))
-        C.CNodeCap capObj capGuard capGuardSize -> Cap_CNode (CapCNode (translateId capObj) capGuard capGuardSize)
-        C.TCBCap capObj -> Cap_TCB (CapTCB (translateId capObj))
-        C.IRQHandlerCap capObj -> Cap_IRQHandler (CapIRQHandler (translateId capObj))
-        C.VCPUCap capObj -> Cap_VCPU (CapVCPU (translateId capObj))
+        C.UntypedCap capObj -> Cap_Untyped (CapUntyped (renderId capObj))
+        C.EndpointCap capObj capBadge capRights -> Cap_Endpoint (CapEndpoint (renderId capObj) capBadge (renderRights capRights))
+        C.NotificationCap capObj capBadge capRights -> Cap_Notification (CapNotification (renderId capObj) capBadge (renderRights capRights))
+        C.CNodeCap capObj capGuard capGuardSize -> Cap_CNode (CapCNode (renderId capObj) capGuard capGuardSize)
+        C.TCBCap capObj -> Cap_TCB (CapTCB (renderId capObj))
+        C.IRQHandlerCap capObj -> Cap_IRQHandler (CapIRQHandler (renderId capObj))
+        C.VCPUCap capObj -> Cap_VCPU (CapVCPU (renderId capObj))
         C.FrameCap { capObj, capRights, capCached } ->
             let Just (C.Frame { vmSizeBits }) = M.lookup capObj objMap
-                id = translateId capObj
-                rights = translateRights capRights
+                id = renderId capObj
+                rights = renderRights capRights
             in case vmSizeBits of
                 12 -> Cap_SmallPage (CapSmallPage id rights capCached)
                 21 -> Cap_LargePage (CapLargePage id rights capCached)
-        C.PTCap capObj _ -> Cap_PT (CapPT (translateId capObj))
-        C.PDCap capObj _ -> Cap_PD (CapPD (translateId capObj))
-        C.PUDCap capObj _ -> Cap_PUD (CapPUD (translateId capObj))
-        C.PGDCap capObj _ -> Cap_PGD (CapPGD (translateId capObj))
-        C.ARMIRQHandlerCap capObj -> Cap_ArmIRQHandler (CapArmIRQHandler (translateId capObj))
-        C.ASIDPoolCap capObj -> Cap_ASIDPool (CapASIDPool (translateId capObj))
+        C.PTCap capObj _ -> Cap_PT (CapPT (renderId capObj))
+        C.PDCap capObj _ -> Cap_PD (CapPD (renderId capObj))
+        C.PUDCap capObj _ -> Cap_PUD (CapPUD (renderId capObj))
+        C.PGDCap capObj _ -> Cap_PGD (CapPGD (renderId capObj))
+        C.ARMIRQHandlerCap capObj -> Cap_ArmIRQHandler (CapArmIRQHandler (renderId capObj))
+        C.ASIDPoolCap capObj -> Cap_ASIDPool (CapASIDPool (renderId capObj))
         x -> traceShow x undefined
 
 renderName :: C.ObjID -> String
 renderName (name, Nothing) = name
 
-translateFill :: Maybe [[String]] -> Fill
-translateFill = map f . concat . toList
+renderFill :: Maybe [[String]] -> Fill
+renderFill = map f . concat . toList
   where
     f (dest_offset:dest_len:rest) = FillEntry
         { range = FillEntryRange { start = start, end = end }
@@ -460,8 +460,8 @@ translateFill = map f . concat . toList
                     , offset = read offset
                     })
 
-translateRights :: C.CapRights -> Rights
-translateRights = foldr f emptyRights
+renderRights :: C.CapRights -> Rights
+renderRights = foldr f emptyRights
     where
     f right acc = case right of
         C.Read -> acc { rights_read = True }

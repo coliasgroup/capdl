@@ -191,20 +191,20 @@ data ObjectCNode = ObjectCNode
 
 data ObjectTCB = ObjectTCB
     { slots :: CapTable
-    , fault_ep :: CPtr
-    , init_args :: [Maybe Word] -- invariant: length init_args == 4
-    , extra_info :: ObjectTCBExtraInfo
+    , extra :: ObjectTCBExtraInfo
     } deriving (Eq, Show, Generic, ToJSON)
 
 data ObjectTCBExtraInfo = ObjectTCBExtraInfo
-    { affinity :: Word
+    { ipc_buffer_addr :: Word
+    , fault_ep :: CPtr
+    , affinity :: Word
     , prio :: Word
     , max_prio :: Word
     , resume :: Bool
     , ip :: Word
     , sp :: Word
     , spsr :: Word
-    , ipc_buffer_addr :: Word
+    , gprs :: [Word]
     } deriving (Eq, Show, Generic, ToJSON)
 
 data ObjectIRQ = ObjectIRQ
@@ -243,7 +243,11 @@ data ObjectASIDPool = ObjectASIDPool
 
 data ObjectArmIRQ = ObjectArmIRQ
     { slots :: CapTable
-    , trigger :: Word
+    , extra :: ObjectArmIRQExtraInfo
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data ObjectArmIRQExtraInfo = ObjectArmIRQExtraInfo
+    { trigger :: Word
     , target :: Word
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -371,7 +375,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.CNode slots 0 -> Object_IRQ (ObjectIRQ (translateCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
         C.CNode slots sizeBits -> Object_CNode (ObjectCNode sizeBits (translateCapTable slots))
         C.VCPU -> Object_VCPU
-        C.ARMIrq slots trigger target -> Object_ArmIRQ (ObjectArmIRQ (translateCapTable slots) trigger target)
+        C.ARMIrq slots trigger target -> Object_ArmIRQ (ObjectArmIRQ (translateCapTable slots) (ObjectArmIRQExtraInfo trigger target))
         C.ASIDPool slots (Just asidHigh) -> assert (M.null slots) Object_ASIDPool (ObjectASIDPool asidHigh)
         C.TCB
             { slots
@@ -391,10 +395,9 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
                     } = extraInfo
             in Object_TCB (ObjectTCB
                 { slots = translateCapTable slots
-                , fault_ep = fromMaybe 0 faultEndpoint
-                , init_args = assert (length initArguments <= 4) $ take 4 (map Just initArguments <>  repeat Nothing)
-                , extra_info = ObjectTCBExtraInfo
+                , extra = ObjectTCBExtraInfo
                     { ipc_buffer_addr = ipcBufferAddr
+                    , fault_ep = fromMaybe 0 faultEndpoint
                     , affinity = fromIntegral affinity
                     , prio = fromIntegral prio
                     , max_prio = fromIntegral max_prio
@@ -402,6 +405,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
                     , ip
                     , sp
                     , spsr = fromMaybe 0 spsr
+                    , gprs = initArguments
                     }
                 })
         x -> traceShow x undefined

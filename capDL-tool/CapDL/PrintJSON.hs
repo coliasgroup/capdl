@@ -59,8 +59,7 @@ data Object =
     | Object_TCB ObjectTCB
     | Object_IRQ ObjectIRQ
     | Object_VCPU
-    | Object_SmallPage ObjectSmallPage
-    | Object_LargePage ObjectLargePage
+    | Object_Frame ObjectFrame
     | Object_PT ObjectPT
     | Object_PD ObjectPD
     | Object_PUD ObjectPUD
@@ -78,8 +77,7 @@ instance ToJSON Object where
         Object_TCB obj -> tagged "TCB" obj
         Object_IRQ obj -> tagged "IRQ" obj
         Object_VCPU -> String "VCPU"
-        Object_SmallPage obj -> tagged "SmallPage" obj
-        Object_LargePage obj -> tagged "LargePage" obj
+        Object_Frame obj -> tagged "Frame" obj
         Object_PT obj -> tagged "PT" obj
         Object_PD obj -> tagged "PD" obj
         Object_PUD obj -> tagged "PUD" obj
@@ -95,8 +93,7 @@ data Cap =
     | Cap_TCB CapTCB
     | Cap_IRQHandler CapIRQHandler
     | Cap_VCPU CapVCPU
-    | Cap_SmallPage CapSmallPage
-    | Cap_LargePage CapLargePage
+    | Cap_Frame CapFrame
     | Cap_PT CapPT
     | Cap_PD CapPD
     | Cap_PUD CapPUD
@@ -114,8 +111,7 @@ instance ToJSON Cap where
         Cap_TCB cap -> tagged "TCB" cap
         Cap_IRQHandler cap -> tagged "IRQHandler" cap
         Cap_VCPU cap -> tagged "VCPU" cap
-        Cap_SmallPage cap -> tagged "SmallPage" cap
-        Cap_LargePage cap -> tagged "LargePage" cap
+        Cap_Frame cap -> tagged "Frame" cap
         Cap_PT cap -> tagged "PT" cap
         Cap_PD cap -> tagged "PD" cap
         Cap_PUD cap -> tagged "PUD" cap
@@ -211,13 +207,9 @@ data ObjectIRQ = ObjectIRQ
     { slots :: CapTable
     } deriving (Eq, Show, Generic, ToJSON)
 
-data ObjectSmallPage = ObjectSmallPage
-    { paddr :: Maybe Word
-    , fill :: Fill
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data ObjectLargePage = ObjectLargePage
-    { paddr :: Maybe Word
+data ObjectFrame = ObjectFrame
+    { size_bits :: Word
+    , paddr :: Maybe Word
     , fill :: Fill
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -285,13 +277,7 @@ data CapVCPU = CapVCPU
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
-data CapSmallPage = CapSmallPage
-    { object :: ObjID
-    , rights :: Rights
-    , cached :: Bool
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data CapLargePage = CapLargePage
+data CapFrame = CapFrame
     { object :: ObjID
     , rights :: Rights
     , cached :: Bool
@@ -363,11 +349,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.Untyped { maybeSizeBits = Just sizeBits, maybePaddr } -> Object_Untyped (ObjectUntyped sizeBits maybePaddr)
         C.Endpoint -> Object_Endpoint
         C.Notification -> Object_Notification
-        C.Frame { vmSizeBits, maybePaddr, maybeFill } ->
-            let fill = renderFill maybeFill
-            in case vmSizeBits of
-                12 -> Object_SmallPage (ObjectSmallPage maybePaddr fill)
-                21 -> Object_LargePage (ObjectLargePage maybePaddr fill)
+        C.Frame { vmSizeBits, maybePaddr, maybeFill } -> Object_Frame (ObjectFrame vmSizeBits maybePaddr (renderFill maybeFill))
         C.PT slots -> Object_PT (ObjectPT (renderCapTable slots))
         C.PD slots -> Object_PD (ObjectPD (renderCapTable slots))
         C.PUD slots -> Object_PUD (ObjectPUD (renderCapTable slots))
@@ -418,13 +400,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.TCBCap capObj -> Cap_TCB (CapTCB (renderId capObj))
         C.IRQHandlerCap capObj -> Cap_IRQHandler (CapIRQHandler (renderId capObj))
         C.VCPUCap capObj -> Cap_VCPU (CapVCPU (renderId capObj))
-        C.FrameCap { capObj, capRights, capCached } ->
-            let Just (C.Frame { vmSizeBits }) = M.lookup capObj objMap
-                id = renderId capObj
-                rights = renderRights capRights
-            in case vmSizeBits of
-                12 -> Cap_SmallPage (CapSmallPage id rights capCached)
-                21 -> Cap_LargePage (CapLargePage id rights capCached)
+        C.FrameCap { capObj, capRights, capCached } -> Cap_Frame (CapFrame (renderId capObj) (renderRights capRights) capCached)
         C.PTCap capObj _ -> Cap_PT (CapPT (renderId capObj))
         C.PDCap capObj _ -> Cap_PD (CapPD (renderId capObj))
         C.PUDCap capObj _ -> Cap_PUD (CapPUD (renderId capObj))

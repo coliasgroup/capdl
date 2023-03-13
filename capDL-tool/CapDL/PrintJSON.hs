@@ -60,10 +60,7 @@ data Object =
     | Object_IRQ ObjectIRQ
     | Object_VCPU
     | Object_Frame ObjectFrame
-    | Object_PT ObjectPT
-    | Object_PD ObjectPD
-    | Object_PUD ObjectPUD
-    | Object_PGD ObjectPGD
+    | Object_PageTable ObjectPageTable
     | Object_ASIDPool ObjectASIDPool
     | Object_ArmIRQ ObjectArmIRQ
     deriving (Eq, Show)
@@ -78,10 +75,7 @@ instance ToJSON Object where
         Object_IRQ obj -> tagged "IRQ" obj
         Object_VCPU -> String "VCPU"
         Object_Frame obj -> tagged "Frame" obj
-        Object_PT obj -> tagged "PT" obj
-        Object_PD obj -> tagged "PD" obj
-        Object_PUD obj -> tagged "PUD" obj
-        Object_PGD obj -> tagged "PGD" obj
+        Object_PageTable obj -> tagged "PageTable" obj
         Object_ASIDPool obj -> tagged "ASIDPool" obj
         Object_ArmIRQ obj -> tagged "ArmIRQ" obj
 
@@ -94,10 +88,7 @@ data Cap =
     | Cap_IRQHandler CapIRQHandler
     | Cap_VCPU CapVCPU
     | Cap_Frame CapFrame
-    | Cap_PT CapPT
-    | Cap_PD CapPD
-    | Cap_PUD CapPUD
-    | Cap_PGD CapPGD
+    | Cap_PageTable CapPageTable
     | Cap_ASIDPool CapASIDPool
     | Cap_ArmIRQHandler CapArmIRQHandler
     deriving (Eq, Show)
@@ -112,10 +103,7 @@ instance ToJSON Cap where
         Cap_IRQHandler cap -> tagged "IRQHandler" cap
         Cap_VCPU cap -> tagged "VCPU" cap
         Cap_Frame cap -> tagged "Frame" cap
-        Cap_PT cap -> tagged "PT" cap
-        Cap_PD cap -> tagged "PD" cap
-        Cap_PUD cap -> tagged "PUD" cap
-        Cap_PGD cap -> tagged "PGD" cap
+        Cap_PageTable cap -> tagged "PageTable" cap
         Cap_ASIDPool cap -> tagged "ASIDPool" cap
         Cap_ArmIRQHandler cap -> tagged "ArmIRQHandler" cap
 
@@ -213,20 +201,10 @@ data ObjectFrame = ObjectFrame
     , fill :: Fill
     } deriving (Eq, Show, Generic, ToJSON)
 
-data ObjectPT = ObjectPT
-    { slots :: CapTable
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data ObjectPD = ObjectPD
-    { slots :: CapTable
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data ObjectPUD = ObjectPUD
-    { slots :: CapTable
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data ObjectPGD = ObjectPGD
-    { slots :: CapTable
+data ObjectPageTable = ObjectPageTable
+    { is_root :: Bool
+    , level :: Maybe Int
+    , slots :: CapTable
     } deriving (Eq, Show, Generic, ToJSON)
 
 data ObjectASIDPool = ObjectASIDPool
@@ -283,19 +261,7 @@ data CapFrame = CapFrame
     , cached :: Bool
     } deriving (Eq, Show, Generic, ToJSON)
 
-data CapPT = CapPT
-    { object :: ObjID
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data CapPD = CapPD
-    { object :: ObjID
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data CapPUD = CapPUD
-    { object :: ObjID
-    } deriving (Eq, Show, Generic, ToJSON)
-
-data CapPGD = CapPGD
+data CapPageTable = CapPageTable
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -350,10 +316,10 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.Endpoint -> Object_Endpoint
         C.Notification -> Object_Notification
         C.Frame { vmSizeBits, maybePaddr, maybeFill } -> Object_Frame (ObjectFrame vmSizeBits maybePaddr (renderFill maybeFill))
-        C.PT slots -> Object_PT (ObjectPT (renderCapTable slots))
-        C.PD slots -> Object_PD (ObjectPD (renderCapTable slots))
-        C.PUD slots -> Object_PUD (ObjectPUD (renderCapTable slots))
-        C.PGD slots -> Object_PGD (ObjectPGD (renderCapTable slots))
+        C.PT slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 3, slots = renderCapTable slots })
+        C.PD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 2, slots = renderCapTable slots })
+        C.PUD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 1, slots = renderCapTable slots })
+        C.PGD slots -> Object_PageTable (ObjectPageTable { is_root = True, level = Just 0, slots = renderCapTable slots })
         C.CNode slots 0 -> Object_IRQ (ObjectIRQ (renderCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
         C.CNode slots sizeBits -> Object_CNode (ObjectCNode sizeBits (renderCapTable slots))
         C.VCPU -> Object_VCPU
@@ -401,10 +367,10 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.IRQHandlerCap capObj -> Cap_IRQHandler (CapIRQHandler (renderId capObj))
         C.VCPUCap capObj -> Cap_VCPU (CapVCPU (renderId capObj))
         C.FrameCap { capObj, capRights, capCached } -> Cap_Frame (CapFrame (renderId capObj) (renderRights capRights) capCached)
-        C.PTCap capObj _ -> Cap_PT (CapPT (renderId capObj))
-        C.PDCap capObj _ -> Cap_PD (CapPD (renderId capObj))
-        C.PUDCap capObj _ -> Cap_PUD (CapPUD (renderId capObj))
-        C.PGDCap capObj _ -> Cap_PGD (CapPGD (renderId capObj))
+        C.PTCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
+        C.PDCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
+        C.PUDCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
+        C.PGDCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
         C.ARMIRQHandlerCap capObj -> Cap_ArmIRQHandler (CapArmIRQHandler (renderId capObj))
         C.ASIDPoolCap capObj -> Cap_ASIDPool (CapASIDPool (renderId capObj))
         x -> traceShow x undefined

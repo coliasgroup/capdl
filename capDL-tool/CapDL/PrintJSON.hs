@@ -17,6 +17,7 @@ import Data.ByteString.Lazy.Char8 (unpack)
 import Data.Foldable
 import Data.List
 import Data.Maybe
+import Data.Word (Word64)
 import Data.Ord (comparing)
 import Debug.Trace (traceShow)
 import GHC.Generics (Generic)
@@ -63,6 +64,8 @@ data Object =
     | Object_PageTable ObjectPageTable
     | Object_ASIDPool ObjectASIDPool
     | Object_ArmIRQ ObjectArmIRQ
+    | Object_SchedContext ObjectSchedContext
+    | Object_Reply
     deriving (Eq, Show)
 
 instance ToJSON Object where
@@ -78,6 +81,8 @@ instance ToJSON Object where
         Object_PageTable obj -> tagged "PageTable" obj
         Object_ASIDPool obj -> tagged "ASIDPool" obj
         Object_ArmIRQ obj -> tagged "ArmIRQ" obj
+        Object_SchedContext obj -> tagged "SchedContext" obj
+        Object_Reply -> String "Reply"
 
 data Cap =
       Cap_Untyped CapUntyped
@@ -91,6 +96,8 @@ data Cap =
     | Cap_PageTable CapPageTable
     | Cap_ASIDPool CapASIDPool
     | Cap_ArmIRQHandler CapArmIRQHandler
+    | Cap_SchedContext CapSchedContext
+    | Cap_Reply CapReply
     deriving (Eq, Show)
 
 instance ToJSON Cap where
@@ -106,6 +113,8 @@ instance ToJSON Cap where
         Cap_PageTable cap -> tagged "PageTable" cap
         Cap_ASIDPool cap -> tagged "ASIDPool" cap
         Cap_ArmIRQHandler cap -> tagged "ArmIRQHandler" cap
+        Cap_SchedContext cap -> tagged "SchedContext" cap
+        Cap_Reply cap -> tagged "Reply" cap
 
 data Rights = Rights
     { rights_read :: Bool
@@ -180,7 +189,6 @@ data ObjectTCB = ObjectTCB
 
 data ObjectTCBExtraInfo = ObjectTCBExtraInfo
     { ipc_buffer_addr :: Word
-    , fault_ep :: CPtr
     , affinity :: Word
     , prio :: Word
     , max_prio :: Word
@@ -189,6 +197,7 @@ data ObjectTCBExtraInfo = ObjectTCBExtraInfo
     , sp :: Word
     , spsr :: Word
     , gprs :: [Word]
+    , master_fault_ep :: CPtr
     } deriving (Eq, Show, Generic, ToJSON)
 
 data ObjectIRQ = ObjectIRQ
@@ -219,6 +228,17 @@ data ObjectArmIRQ = ObjectArmIRQ
 data ObjectArmIRQExtraInfo = ObjectArmIRQExtraInfo
     { trigger :: Word
     , target :: Word
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data ObjectSchedContext = ObjectSchedContext
+    { size_bits :: Word
+    , extra :: ObjectSchedContextExtraInfo
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data ObjectSchedContextExtraInfo = ObjectSchedContextExtraInfo
+    { period :: Word64
+    , budget :: Word64
+    , badge :: Badge
     } deriving (Eq, Show, Generic, ToJSON)
 
 data CapUntyped = CapUntyped
@@ -270,6 +290,14 @@ data CapASIDPool = CapASIDPool
     } deriving (Eq, Show, Generic, ToJSON)
 
 data CapArmIRQHandler = CapArmIRQHandler
+    { object :: ObjID
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data CapSchedContext = CapSchedContext
+    { object :: ObjID
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data CapReply = CapReply
     { object :: ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
@@ -325,6 +353,7 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.VCPU -> Object_VCPU
         C.ARMIrq slots trigger target -> Object_ArmIRQ (ObjectArmIRQ (renderCapTable slots) (ObjectArmIRQExtraInfo trigger target))
         C.ASIDPool slots (Just asidHigh) -> assert (M.null slots) Object_ASIDPool (ObjectASIDPool asidHigh)
+        C.RTReply -> Object_Reply
         C.TCB
             { slots
             , faultEndpoint
@@ -345,7 +374,6 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
                 { slots = renderCapTable slots
                 , extra = ObjectTCBExtraInfo
                     { ipc_buffer_addr = ipcBufferAddr
-                    , fault_ep = fromMaybe 0 faultEndpoint
                     , affinity = fromIntegral affinity
                     , prio = fromIntegral prio
                     , max_prio = fromIntegral max_prio
@@ -354,6 +382,24 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
                     , sp
                     , spsr = fromMaybe 0 spsr
                     , gprs = initArguments
+                    , master_fault_ep = fromMaybe 0 faultEndpoint
+                    }
+                })
+        C.SC
+            { maybeSizeBits = Just sizeBits
+            , sc_extraInfo = Just extraInfo
+            } ->
+            let C.SCExtraInfo
+                    { period = Just period
+                    , budget = Just budget
+                    , scData = Just badge
+                    } = extraInfo
+            in Object_SchedContext (ObjectSchedContext
+                { size_bits = sizeBits
+                , extra = ObjectSchedContextExtraInfo
+                    { period
+                    , budget
+                    , badge
                     }
                 })
         x -> traceShow x undefined
@@ -373,6 +419,8 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
         C.PGDCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
         C.ARMIRQHandlerCap capObj -> Cap_ArmIRQHandler (CapArmIRQHandler (renderId capObj))
         C.ASIDPoolCap capObj -> Cap_ASIDPool (CapASIDPool (renderId capObj))
+        C.SCCap capObj -> Cap_SchedContext (CapSchedContext (renderId capObj))
+        C.RTReplyCap capObj -> Cap_Reply (CapReply (renderId capObj))
         x -> traceShow x undefined
 
 renderName :: C.ObjID -> String

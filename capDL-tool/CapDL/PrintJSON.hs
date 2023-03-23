@@ -23,6 +23,7 @@ import Debug.Trace (traceShow)
 import GHC.Generics (Generic)
 import qualified Data.Aeson as Aeson
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import CapDL.PrintUtils (sortObjects)
 import qualified CapDL.Model as C
@@ -45,6 +46,18 @@ data Spec = Spec
     { objects :: [NamedObject]
     , irqs :: [(Word, ObjID)]
     , asid_slots :: [ObjID]
+    , root_objects :: Range ObjID
+    , untyped_covers :: [UntypedCover]
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data Range a = Range
+    { start :: a
+    , end :: a
+    } deriving (Eq, Show, Generic, ToJSON)
+
+data UntypedCover = UntypedCover
+    { parent :: ObjID
+    , children :: Range ObjID
     } deriving (Eq, Show, Generic, ToJSON)
 
 data NamedObject = NamedObject
@@ -307,21 +320,39 @@ tagged tag value = Aeson.object [ tag .= toJSON value ]
 ---
 
 render :: C.ObjectSizeMap -> C.Model Word -> Spec
-render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
+render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
     { objects
     , irqs
     , asid_slots = asidSlots
+    , root_objects = Range 0 (toInteger numRootObjects)
+    , untyped_covers = untypedCovers
     }
   where
-    sortedObjects = sortObjects objSizeMap (M.toList objMap)
-    objIdToSeqId = M.fromList . flip zip [0..] $ map fst sortedObjects
-    renderId = (M.!) objIdToSeqId
+    orderedObjectIds = rootObjectIds ++ childObjectIds
+
+    numRootObjects = length rootObjectIds
+
+    rootObjectIds = map fst sorted
+      where
+        allChildren = S.fromList . concat $ M.elems coverMap
+        unsorted = filter (flip S.notMember allChildren) (M.keys objMap)
+        sorted = sortObjects objSizeMap [ (objId, objMap M.! objId) | objId <- unsorted ]
+
+    (_, childObjectIds, untypedCovers) = foldr f (numRootObjects, [], []) (concatMap M.toList (objectLayers coverMap))
+      where
+        f (parent, children) (n, allChildren, covers) =
+            ( n + length children
+            , allChildren ++ children
+            , covers ++ [UntypedCover (renderId parent) (Range (toInteger n) (toInteger (n + length children)))]
+            )
+
+    renderId = (M.!) (M.fromList (zip orderedObjectIds [0..]))
     renderCapTable = M.toList . M.map renderCap . M.mapKeys toInteger
 
     irqs =
         [ (irq, renderId obj)
         | (irq, obj) <- M.toAscList irqNode
-        ] 
+        ]
 
     asidSlots = assert (map fst table `isPrefixOf` [1..]) (map snd table)
       where
@@ -333,10 +364,10 @@ render objSizeMap (C.Model _ objMap irqNode _ _) = Spec
 
     objects =
         [ NamedObject
-            { name = renderName name
-            , object = renderObj value
+            { name = renderName objId
+            , object = renderObj (objMap M.! objId)
             }
-        | (name, value) <- sortedObjects
+        | objId <- orderedObjectIds
         ]
 
     renderObj object = case object of
@@ -458,3 +489,14 @@ renderRights = foldr f emptyRights
         C.Write -> acc { rights_write = True }
         C.Grant -> acc { rights_grant = True }
         C.GrantReply -> acc { rights_grant_reply = True }
+
+objectLayers :: C.CoverMap -> [C.CoverMap]
+objectLayers = unfoldr step
+  where
+    step :: C.CoverMap -> Maybe (C.CoverMap, C.CoverMap)
+    step intermediate =
+        if M.null intermediate
+        then Nothing
+        else
+            let children = S.fromList . concat $ M.elems intermediate
+            in  Just $ M.partitionWithKey (const . (`S.member` children)) intermediate

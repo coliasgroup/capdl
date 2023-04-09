@@ -379,6 +379,8 @@ render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
         C.PD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 2, slots = renderCapTable slots })
         C.PUD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 1, slots = renderCapTable slots })
         C.PGD slots -> Object_PageTable (ObjectPageTable { is_root = True, level = Just 0, slots = renderCapTable slots })
+        C.PDPT slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 1, slots = renderCapTable slots })
+        C.PML4 slots -> Object_PageTable (ObjectPageTable { is_root = True, level = Just 0, slots = renderCapTable slots })
         C.CNode slots 0 -> Object_IRQ (ObjectIRQ (renderCapTable slots)) -- model uses 0-sized CNodes as token objects for IRQs
         C.CNode slots sizeBits -> Object_CNode (ObjectCNode sizeBits (renderCapTable slots))
         C.VCPU -> Object_VCPU
@@ -448,6 +450,8 @@ render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
         C.PDCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
         C.PUDCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
         C.PGDCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
+        C.PDPTCap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
+        C.PML4Cap capObj _ -> Cap_PageTable (CapPageTable (renderId capObj))
         C.ARMIRQHandlerCap capObj -> Cap_ArmIRQHandler (CapArmIRQHandler (renderId capObj))
         C.ASIDPoolCap capObj -> Cap_ASIDPool (CapASIDPool (renderId capObj))
         C.SCCap capObj -> Cap_SchedContext (CapSchedContext (renderId capObj))

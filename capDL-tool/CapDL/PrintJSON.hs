@@ -148,7 +148,15 @@ instance ToJSON Rights where
 emptyRights :: Rights
 emptyRights = Rights False False False False
 
-type Fill = [FillEntry]
+data FrameInit = FrameInit Fill
+    deriving (Eq, Show)
+
+instance ToJSON FrameInit where
+    toJSON (FrameInit fill) = tagged "Fill" fill
+
+data Fill = Fill
+    { entries :: [FillEntry]
+    } deriving (Eq, Show, Generic, ToJSON)
 
 data FillEntry = FillEntry
     { range :: FillEntryRange
@@ -220,7 +228,7 @@ data ObjectIRQ = ObjectIRQ
 data ObjectFrame = ObjectFrame
     { size_bits :: Word
     , paddr :: Maybe Word
-    , fill :: Fill
+    , init :: FrameInit
     } deriving (Eq, Show, Generic, ToJSON)
 
 data ObjectPageTable = ObjectPageTable
@@ -374,7 +382,7 @@ render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
         C.Untyped { maybeSizeBits = Just sizeBits, maybePaddr } -> Object_Untyped (ObjectUntyped sizeBits maybePaddr)
         C.Endpoint -> Object_Endpoint
         C.Notification -> Object_Notification
-        C.Frame { vmSizeBits, maybePaddr, maybeFill } -> Object_Frame (ObjectFrame vmSizeBits maybePaddr (renderFill maybeFill))
+        C.Frame { vmSizeBits, maybePaddr, maybeFill } -> Object_Frame (ObjectFrame vmSizeBits maybePaddr (renderFrameInit maybeFill))
         C.PT slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 3, slots = renderCapTable slots })
         C.PD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 2, slots = renderCapTable slots })
         C.PUD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 1, slots = renderCapTable slots })
@@ -461,8 +469,8 @@ render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
 renderName :: C.ObjID -> String
 renderName (name, Nothing) = name
 
-renderFill :: Maybe [[String]] -> Fill
-renderFill = map f . concat . toList
+renderFrameInit :: Maybe [[String]] -> FrameInit
+renderFrameInit = FrameInit . Fill . map f . concat . toList
   where
     f (dest_offset:dest_len:rest) = FillEntry
         { range = FillEntryRange { start = start, end = end }
@@ -475,7 +483,7 @@ renderFill = map f . concat . toList
         content = case rest of
             "CDL_FrameFill_FileData":file:file_offset:[] -> FillEntryContent_Data
                 (FillEntryContentFile
-                    { file = tail (init file)
+                    { file = tail (Data.List.init file)
                     , file_offset = read file_offset
                     })
             "CDL_FrameFill_BootInfo":id:offset:[] -> FillEntryContent_BootInfo

@@ -346,7 +346,7 @@ render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
         unsorted = filter (flip S.notMember allChildren) (M.keys objMap)
         sorted = sortObjects objSizeMap [ (objId, objMap M.! objId) | objId <- unsorted ]
 
-    (_, childObjectIds, untypedCovers) = foldr f (numRootObjects, [], []) (concatMap M.toList (objectLayers coverMap))
+    (_, childObjectIds, untypedCovers) = foldr f (numRootObjects, [], []) (concatMap M.toList (traceShowId $ objectLayers coverMap))
       where
         f (parent, children) (n, allChildren, covers) =
             ( n + length children
@@ -511,4 +511,4 @@ objectLayers = unfoldr step
         then Nothing
         else
             let children = S.fromList . concat $ M.elems intermediate
-            in  Just $ M.partitionWithKey (const . (`S.member` children)) intermediate
+            in  Just $ M.partitionWithKey (const . not . (`S.member` children)) intermediate

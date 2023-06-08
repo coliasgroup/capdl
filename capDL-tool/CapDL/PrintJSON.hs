@@ -511,4 +511,4 @@ objectLayers = unfoldr step
         then Nothing
         else
             let children = S.fromList . concat $ M.elems intermediate
-            in  Just $ M.partitionWithKey (const . (`S.member` children)) intermediate
+            in  Just $ M.partitionWithKey (const . not . (`S.member` children)) intermediate

@@ -328,7 +328,7 @@ tagged tag value = Aeson.object [ tag .= toJSON value ]
 ---
 
 render :: C.ObjectSizeMap -> C.Model Word -> Spec
-render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
+render objSizeMap (C.Model arch objMap irqNode _ coverMap) = Spec
     { objects
     , irqs
     , asid_slots = asidSlots
@@ -357,6 +357,11 @@ render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
     renderId = (M.!) (M.fromList (zip orderedObjectIds [0..]))
     renderCapTable = M.toList . M.map renderCap . M.mapKeys toInteger
 
+    pageTableIsVSpace = flip S.member . S.fromList $ do
+        C.TCB { slots } <- M.elems objMap
+        C.PTCap { capObj } <- return $ slots M.! C.tcbVTableSlot
+        return capObj
+
     irqs =
         [ (irq, renderId obj)
         | (irq, obj) <- M.toAscList irqNode
@@ -373,17 +378,21 @@ render objSizeMap (C.Model _ objMap irqNode _ coverMap) = Spec
     objects =
         [ NamedObject
             { name = renderName objId
-            , object = renderObj (objMap M.! objId)
+            , object = renderObj objId
             }
         | objId <- orderedObjectIds
         ]
 
-    renderObj object = case object of
+    renderObj objId = case objMap M.! objId of
         C.Untyped { maybeSizeBits = Just sizeBits, maybePaddr } -> Object_Untyped (ObjectUntyped sizeBits maybePaddr)
         C.Endpoint -> Object_Endpoint
         C.Notification -> Object_Notification
         C.Frame { vmSizeBits, maybePaddr, maybeFill } -> Object_Frame (ObjectFrame vmSizeBits maybePaddr (renderFrameInit maybeFill))
-        C.PT slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 3, slots = renderCapTable slots })
+        C.PT slots -> Object_PageTable $
+            let renderedSlots = renderCapTable slots
+            in case arch of
+                C.RISCV -> ObjectPageTable { is_root = pageTableIsVSpace objId, level = Nothing, slots = renderedSlots }
+                _ -> ObjectPageTable { is_root = False, level = Just 3, slots = renderedSlots }
         C.PD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 2, slots = renderCapTable slots })
         C.PUD slots -> Object_PageTable (ObjectPageTable { is_root = False, level = Just 1, slots = renderCapTable slots })
         C.PGD slots -> Object_PageTable (ObjectPageTable { is_root = True, level = Just 0, slots = renderCapTable slots })

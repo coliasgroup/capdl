@@ -87,13 +87,13 @@ instance ToJSON Object where
         Object_Endpoint -> String "Endpoint"
         Object_Notification -> String "Notification"
         Object_CNode obj -> tagged "CNode" obj
-        Object_TCB obj -> tagged "TCB" obj
-        Object_IRQ obj -> tagged "IRQ" obj
-        Object_VCPU -> String "VCPU"
+        Object_TCB obj -> tagged "Tcb" obj
+        Object_IRQ obj -> tagged "Irq" obj
+        Object_VCPU -> String "VCpu"
         Object_Frame obj -> tagged "Frame" obj
         Object_PageTable obj -> tagged "PageTable" obj
-        Object_ASIDPool obj -> tagged "ASIDPool" obj
-        Object_ArmIRQ obj -> tagged "ArmIRQ" obj
+        Object_ASIDPool obj -> tagged "AsidPool" obj
+        Object_ArmIRQ obj -> tagged "ArmIrq" obj
         Object_SchedContext obj -> tagged "SchedContext" obj
         Object_Reply -> String "Reply"
 
@@ -119,13 +119,13 @@ instance ToJSON Cap where
         Cap_Endpoint cap -> tagged "Endpoint" cap
         Cap_Notification cap -> tagged "Notification" cap
         Cap_CNode cap -> tagged "CNode" cap
-        Cap_TCB cap -> tagged "TCB" cap
+        Cap_TCB cap -> tagged "Tcb" cap
         Cap_IRQHandler cap -> tagged "IRQHandler" cap
-        Cap_VCPU cap -> tagged "VCPU" cap
+        Cap_VCPU cap -> tagged "VCpu" cap
         Cap_Frame cap -> tagged "Frame" cap
         Cap_PageTable cap -> tagged "PageTable" cap
-        Cap_ASIDPool cap -> tagged "ASIDPool" cap
-        Cap_ArmIRQHandler cap -> tagged "ArmIRQHandler" cap
+        Cap_ASIDPool cap -> tagged "AsidPool" cap
+        Cap_ArmIRQHandler cap -> tagged "ArmIrqHandler" cap
         Cap_SchedContext cap -> tagged "SchedContext" cap
         Cap_Reply cap -> tagged "Reply" cap
 

@@ -216,6 +216,7 @@ data ObjectTCBExtraInfo = ObjectTCBExtraInfo
     , resume :: Bool
     , ip :: Word
     , sp :: Word
+    , spsr :: Word
     , gprs :: [Word]
     , master_fault_ep :: CPtr
     } deriving (Eq, Show, Generic, ToJSON)
@@ -413,6 +414,7 @@ render objSizeMap (C.Model arch objMap irqNode _ coverMap) = Spec
                     { ipcBufferAddr
                     , ip = Just ip
                     , sp = Just sp
+                    , spsr -- HACK require with `spsr = Just spsr` in the future.
                     , prio = Just prio
                     , max_prio = Just max_prio
                     , affin = Just affinity
@@ -428,6 +430,7 @@ render objSizeMap (C.Model arch objMap irqNode _ coverMap) = Spec
                     , resume = fromMaybe True resume
                     , ip
                     , sp
+                    , spsr = fromMaybe 0 spsr
                     , gprs = initArguments
                     , master_fault_ep = fromMaybe 0 faultEndpoint
                     }

@@ -162,6 +162,8 @@ data CapParam
         asid :: Asid }
     | Cached {
         cached :: Bool }
+    | Executable {
+        executable :: Bool }
     | FrameMapping {
         container :: NameRef,
         slotIndex :: Word }

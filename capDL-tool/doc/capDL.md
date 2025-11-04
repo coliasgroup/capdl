@@ -128,10 +128,8 @@ in section [Modules](#modules).
                   | 'asid' ':' asid
                   | 'cached'
                   | 'uncached'
-                  | 'executable'
-                  | 'execute_never'
 
-      right ::= 'R' | 'W' | 'G' | 'P'
+      right ::= 'R' | 'W' | 'G' | 'X'
       asid ::= '(' number ',' number ')'
 
       parent ::= '- child_of' slot_ref

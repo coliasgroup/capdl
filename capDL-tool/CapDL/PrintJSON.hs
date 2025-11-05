@@ -522,7 +522,7 @@ renderFill :: Maybe [[String]] -> Fill
 renderFill = Fill . map f . concat . toList
   where
     f (dest_offset:dest_len:rest) = FillEntry
-        { range = FillEntryRange { start = start, end = end }
+        { range = FillEntryRange { start, end }
         , content
         }
       where

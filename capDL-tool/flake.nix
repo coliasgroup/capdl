@@ -8,7 +8,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        ghcVersion = "967";
+        ghcVersion = "9103";
         hls = pkgs.haskell-language-server.override {
           supportedGhcVersions = [ ghcVersion ];
         };
